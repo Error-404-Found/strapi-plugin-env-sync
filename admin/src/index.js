@@ -7,23 +7,17 @@
 import React, { useEffect, useRef } from 'react';
 
 export const PLUGIN_ID   = 'env-sync';
-export const PLUGIN_ICON = 'refresh';
+export const PLUGIN_ICON = 'ArrowsCounterClockwise';
 
 /**
- * Initializer — Strapi v5 requires this component to call setPlugin(pluginId)
- * once the plugin is ready. It renders nothing.
- *
- * @param {{ setPlugin: function }} props
+ * Initializer — signals plugin readiness to Strapi.
+ * Must call setPlugin(id) exactly once, inside useEffect.
  */
 export function Initializer({ setPlugin }) {
   const ref = useRef(setPlugin);
-
-  useEffect(() => {
-    ref.current(PLUGIN_ID);
-  }, []);
-
+  useEffect(() => { ref.current(PLUGIN_ID); }, []);
   return null;
 }
 
-export { SyncButton } from './components/SyncButton';
-export { LogsPage }   from './pages/LogsPage';
+export { SyncButtonAction } from './components/SyncButton';
+export { LogsPage }         from './pages/LogsPage';

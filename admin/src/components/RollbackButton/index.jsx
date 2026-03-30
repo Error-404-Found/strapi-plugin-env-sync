@@ -1,21 +1,14 @@
 /**
- * RollbackButton — confirm-then-rollback dialog.
- * Uses Dialog (confirmed export from @strapi/design-system v2).
+ * RollbackButton — confirm then rollback.
+ * Uses Dialog compound API from @strapi/design-system v2.
  *
  * @module env-sync/admin/src/components/RollbackButton
  */
 
 import React, { useState } from 'react';
-import { Button, Dialog, Flex, Typography, Loader } from '@strapi/design-system';
+import { Button, Dialog, Flex, Typography, Box, Loader } from '@strapi/design-system';
 import { api } from '../../utils/api';
 
-/**
- * @param {object}   props
- * @param {string}   props.snapshotId
- * @param {string}   props.contentType
- * @param {string}   props.documentId
- * @param {function} props.onSuccess
- */
 export function RollbackButton({ snapshotId, contentType, documentId, onSuccess }) {
   const [open,    setOpen]    = useState(false);
   const [loading, setLoading] = useState(false);
@@ -51,18 +44,19 @@ export function RollbackButton({ snapshotId, contentType, documentId, onSuccess 
               {loading ? (
                 <>
                   <Loader small />
-                  <Typography variant="omega">Restoring…</Typography>
+                  <Typography variant="omega">Restoring document…</Typography>
                 </>
               ) : (
                 <Typography variant="omega" textAlign="center">
-                  This will restore <strong>{contentType?.split('.').pop()}</strong>{' '}
-                  (ID: <code>{documentId?.slice(0, 8)}…</code>) to the state before this sync.
+                  Restore <strong>{contentType?.split('.').pop()}</strong>{' '}
+                  (<code style={{ fontSize: '11px' }}>{documentId?.slice(0, 8)}…</code>){' '}
+                  to the state before this sync.
                   <br /><br />
                   <strong>This cannot be undone.</strong>
                 </Typography>
               )}
               {error && (
-                <Box padding={3} background="danger100" borderRadius="4px" width="100%">
+                <Box padding={3} background="danger100" borderRadius="4px" style={{ width: '100%' }}>
                   <Typography variant="pi" textColor="danger600">{error}</Typography>
                 </Box>
               )}
