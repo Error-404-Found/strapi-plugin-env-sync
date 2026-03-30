@@ -109,7 +109,7 @@ module.exports = ({ strapi }) => {
       // ── Create audit log entry ─────────────────────────────────────────────
       const logEntry = await loggerService.createLog({
         contentType,
-        documentId,
+        syncDocumentId: documentId,
         locale,
         sourceEnv:        currentEnv,
         targetEnv,

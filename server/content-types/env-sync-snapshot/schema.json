@@ -8,16 +8,11 @@
     "description": "Point-in-time snapshot of a document taken before a sync overwrites it — used for rollback"
   },
   "options": {
-    "draftAndPublish": false,
-    "comment": "Managed by strapi-plugin-env-sync. Do not modify manually."
+    "draftAndPublish": false
   },
   "pluginOptions": {
-    "content-manager": {
-      "visible": false
-    },
-    "content-type-builder": {
-      "visible": false
-    }
+    "content-manager": { "visible": false },
+    "content-type-builder": { "visible": false }
   },
   "attributes": {
     "contentType": {
@@ -25,54 +20,48 @@
       "required": true,
       "comment": "Strapi UID of the snapshotted content type"
     },
-    "documentId": {
+    "syncDocumentId": {
       "type": "string",
       "required": true,
-      "comment": "documentId of the document that was snapshotted"
+      "comment": "documentId of the Strapi document that was snapshotted (renamed — documentId is reserved in v5)"
     },
     "locale": {
       "type": "string",
-      "default": null,
-      "comment": "Locale of the snapshotted document version, null for non-i18n"
+      "comment": "Locale of the snapshotted document, null for non-i18n"
     },
     "environment": {
       "type": "enumeration",
       "enum": ["SIT", "QA", "UAT", "PROD"],
-      "required": true,
-      "comment": "The environment where this snapshot was taken"
+      "required": true
     },
     "snapshotData": {
       "type": "json",
       "required": true,
-      "comment": "Full serialised document data at the time of snapshot, including all locales"
+      "comment": "Full serialised document at time of snapshot, keyed by locale"
     },
     "mediaManifest": {
       "type": "json",
-      "comment": "List of media files referenced in this snapshot: [{ id, hash, url, name }]"
+      "comment": "List of media files referenced: [{ id, hash, url, name }]"
     },
     "takenAt": {
       "type": "datetime",
-      "required": true,
-      "comment": "When the snapshot was captured"
+      "required": true
     },
     "takenBy": {
       "type": "relation",
       "relation": "manyToOne",
-      "target": "admin::user",
-      "comment": "Admin user who triggered the sync that caused this snapshot"
+      "target": "admin::user"
     },
     "logId": {
       "type": "string",
-      "comment": "References the env-sync-log entry that created this snapshot"
+      "comment": "documentId of the env-sync-log entry that created this snapshot"
     },
     "isRestored": {
       "type": "boolean",
-      "default": false,
-      "comment": "Set to true once this snapshot has been used to roll back"
+      "default": false
     },
     "restoredAt": {
-      "type": "datetime",
-      "default": null
+      "type": "datetime"
     },
     "restoredBy": {
       "type": "relation",
@@ -80,12 +69,11 @@
       "target": "admin::user"
     },
     "sizeBytes": {
-      "type": "integer",
-      "comment": "Approximate size of snapshotData in bytes — for storage monitoring"
+      "type": "integer"
     },
     "checksum": {
       "type": "string",
-      "comment": "SHA-256 hash of snapshotData — integrity verification before restore"
+      "comment": "SHA-256 of snapshotData for integrity verification"
     }
   }
 }

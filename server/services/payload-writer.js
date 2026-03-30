@@ -63,7 +63,7 @@ module.exports = ({ strapi }) => ({
       try {
         snapshot = await rollbackSvc.takeSnapshot({
           contentType,
-          documentId,
+          syncDocumentId: documentId,
           locale:            null, // all locales
           environment:       currentEnv,
           takenByAdminId:    triggeredByAdminId,

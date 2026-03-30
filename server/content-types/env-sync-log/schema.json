@@ -8,16 +8,11 @@
     "description": "Audit trail for every content sync operation triggered between environments"
   },
   "options": {
-    "draftAndPublish": false,
-    "comment": "Managed by strapi-plugin-env-sync. Do not modify manually."
+    "draftAndPublish": false
   },
   "pluginOptions": {
-    "content-manager": {
-      "visible": false
-    },
-    "content-type-builder": {
-      "visible": false
-    }
+    "content-manager": { "visible": false },
+    "content-type-builder": { "visible": false }
   },
   "attributes": {
     "triggeredBy": {
@@ -31,15 +26,14 @@
       "required": true,
       "comment": "Strapi UID, e.g. api::article.article"
     },
-    "documentId": {
+    "syncDocumentId": {
       "type": "string",
       "required": true,
-      "comment": "Strapi v5 documentId of the synced document"
+      "comment": "The documentId of the synced Strapi document (renamed from documentId — reserved in v5)"
     },
     "locale": {
       "type": "string",
-      "default": null,
-      "comment": "Locale being synced, or null for non-i18n content"
+      "comment": "Locale being synced, null for non-i18n content"
     },
     "sourceEnv": {
       "type": "enumeration",
@@ -65,59 +59,47 @@
     },
     "isDryRun": {
       "type": "boolean",
-      "default": false,
-      "comment": "If true, no data was written — this was a preview run"
+      "default": false
     },
     "diffSummary": {
       "type": "json",
-      "comment": "Structured diff: { fieldsChanged: [], relationsUpdated: [], mediaReuploaded: [], localesSynced: [] }"
+      "comment": "Structured diff: { fieldsChanged, relationsUpdated, mediaReuploaded, localesSynced }"
     },
     "payload": {
       "type": "json",
-      "comment": "Full serialised document payload sent to target (retained for debugging)"
+      "comment": "Truncated serialised document payload (for debugging)"
     },
     "errorMessage": {
-      "type": "text",
-      "default": null,
-      "comment": "Human-readable error message if status = failed"
+      "type": "text"
     },
     "errorStack": {
       "type": "text",
-      "default": null,
-      "comment": "Stack trace for debugging — only stored in non-production envs"
+      "comment": "Stack trace — only stored in non-production envs"
     },
     "snapshotId": {
       "type": "string",
-      "default": null,
-      "comment": "References env-sync-snapshot.documentId for rollback"
+      "comment": "documentId of the env-sync-snapshot entry for rollback"
     },
     "duration": {
       "type": "integer",
-      "default": null,
       "comment": "Total sync duration in milliseconds"
     },
     "retryCount": {
       "type": "integer",
-      "default": 0,
-      "comment": "Number of retry attempts made before success or final failure"
+      "default": 0
     },
     "triggeredAt": {
       "type": "datetime",
-      "required": true,
-      "comment": "When the sync was initiated"
+      "required": true
     },
     "completedAt": {
-      "type": "datetime",
-      "default": null,
-      "comment": "When the sync completed (success or failure)"
+      "type": "datetime"
     },
     "targetUrl": {
-      "type": "string",
-      "comment": "The URL of the target environment that received the sync"
+      "type": "string"
     },
     "idempotencyKey": {
-      "type": "string",
-      "comment": "Unique key preventing duplicate concurrent syncs: {documentId}:{targetEnv}:{triggeredAt}"
+      "type": "string"
     }
   }
 }

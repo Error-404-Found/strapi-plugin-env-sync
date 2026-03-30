@@ -4,30 +4,23 @@
  * Logger Service
  *
  * Handles all audit log creation, updates, and retrieval for env-sync operations.
- * Every sync attempt — success, failure, dry-run, rollback — is persisted here.
+ *
+ * NOTE: The schema field storing the synced document's ID is named `syncDocumentId`
+ * (not `documentId`) because `documentId` is a reserved system field in Strapi v5.
+ * The variable `logDocumentId` refers to the log entry's own Strapi documentId.
  *
  * @module env-sync/server/services/logger
  */
 
-const { v4: uuidv4 } = require('crypto').webcrypto
-  ? (() => { try { return require('crypto'); } catch { return { randomUUID: () => uuidv4Fallback() }; } })()
-  : require('crypto');
+const PLUGIN_ID = 'env-sync';
+const LOG_UID   = `plugin::${PLUGIN_ID}.env-sync-log`;
 
-const PLUGIN_ID  = 'env-sync';
-const LOG_UID    = `plugin::${PLUGIN_ID}.env-sync-log`;
-
-// Fallback UUID generator if crypto.randomUUID unavailable
-function generateId() {
-  try {
-    return require('crypto').randomUUID();
-  } catch {
-    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  }
+function generateIdempotencyKey(syncDocId, targetEnv) {
+  return `${syncDocId}:${targetEnv}:${Date.now()}`;
 }
 
 /**
  * @param {{ strapi: import('@strapi/strapi').Strapi }} context
- * @returns {object} logger service
  */
 module.exports = ({ strapi }) => ({
 
@@ -35,21 +28,21 @@ module.exports = ({ strapi }) => ({
    * Create a new log entry with status "pending".
    *
    * @param {object} params
-   * @param {string} params.contentType  - Strapi UID
-   * @param {string} params.documentId   - Document's documentId
-   * @param {string|null} params.locale  - Locale or null
-   * @param {string} params.sourceEnv
-   * @param {string} params.targetEnv
-   * @param {string} params.targetUrl
-   * @param {number} params.triggeredByAdminId
-   * @param {string} params.conflictStrategy
+   * @param {string}  params.contentType
+   * @param {string}  params.syncDocumentId   - The synced document's documentId
+   * @param {string|null} params.locale
+   * @param {string}  params.sourceEnv
+   * @param {string}  params.targetEnv
+   * @param {string}  params.targetUrl
+   * @param {number}  params.triggeredByAdminId
+   * @param {string}  params.conflictStrategy
    * @param {boolean} params.isDryRun
-   * @param {object|null} params.payload  - Serialised document (stored for debugging)
+   * @param {object|null} params.payload
    * @returns {Promise<object>} created log entry
    */
   async createLog({
     contentType,
-    documentId,
+    syncDocumentId,
     locale,
     sourceEnv,
     targetEnv,
@@ -59,12 +52,12 @@ module.exports = ({ strapi }) => ({
     isDryRun = false,
     payload  = null,
   }) {
-    const idempotencyKey = `${documentId}:${targetEnv}:${Date.now()}`;
+    const idempotencyKey = generateIdempotencyKey(syncDocumentId, targetEnv);
 
     const log = await strapi.documents(LOG_UID).create({
       data: {
         contentType,
-        documentId,
+        syncDocumentId,
         locale:          locale ?? null,
         sourceEnv,
         targetEnv,
@@ -80,16 +73,13 @@ module.exports = ({ strapi }) => ({
       },
     });
 
-    strapi.log.debug(`[env-sync] Log created: ${log.documentId} for ${contentType}#${documentId} → ${targetEnv}`);
+    strapi.log.debug(
+      `[env-sync] Log created: ${log.documentId} for ${contentType}#${syncDocumentId} → ${targetEnv}`
+    );
     return log;
   },
 
-  /**
-   * Mark a log entry as in_progress.
-   *
-   * @param {string} logDocumentId
-   * @returns {Promise<object>}
-   */
+  /** Mark in_progress */
   async markInProgress(logDocumentId) {
     return strapi.documents(LOG_UID).update({
       documentId: logDocumentId,
@@ -97,17 +87,7 @@ module.exports = ({ strapi }) => ({
     });
   },
 
-  /**
-   * Mark a log entry as successful.
-   *
-   * @param {string} logDocumentId
-   * @param {object} params
-   * @param {object}  params.diffSummary
-   * @param {string|null} params.snapshotId
-   * @param {number}  params.duration      - milliseconds
-   * @param {number}  params.retryCount
-   * @returns {Promise<object>}
-   */
+  /** Mark success */
   async markSuccess(logDocumentId, { diffSummary, snapshotId, duration, retryCount }) {
     return strapi.documents(LOG_UID).update({
       documentId: logDocumentId,
@@ -124,16 +104,7 @@ module.exports = ({ strapi }) => ({
     });
   },
 
-  /**
-   * Mark a log entry as failed.
-   *
-   * @param {string} logDocumentId
-   * @param {object} params
-   * @param {Error|string} params.error
-   * @param {number} params.duration
-   * @param {number} params.retryCount
-   * @returns {Promise<object>}
-   */
+  /** Mark failed */
   async markFailed(logDocumentId, { error, duration, retryCount }) {
     const isError   = error instanceof Error;
     const message   = isError ? error.message : String(error);
@@ -145,7 +116,7 @@ module.exports = ({ strapi }) => ({
       data: {
         status:       'failed',
         errorMessage: message,
-        errorStack:   isProd ? null : stack,   // Never expose stacks in production
+        errorStack:   isProd ? null : stack,
         duration,
         retryCount:   retryCount ?? 0,
         completedAt:  new Date().toISOString(),
@@ -153,15 +124,7 @@ module.exports = ({ strapi }) => ({
     });
   },
 
-  /**
-   * Mark a log entry as dry_run completed.
-   *
-   * @param {string} logDocumentId
-   * @param {object} params
-   * @param {object} params.diffSummary
-   * @param {number} params.duration
-   * @returns {Promise<object>}
-   */
+  /** Mark dry_run */
   async markDryRun(logDocumentId, { diffSummary, duration }) {
     return strapi.documents(LOG_UID).update({
       documentId: logDocumentId,
@@ -174,12 +137,7 @@ module.exports = ({ strapi }) => ({
     });
   },
 
-  /**
-   * Mark a log entry as rolled_back.
-   *
-   * @param {string} logDocumentId
-   * @returns {Promise<object>}
-   */
+  /** Mark rolled_back */
   async markRolledBack(logDocumentId) {
     return strapi.documents(LOG_UID).update({
       documentId: logDocumentId,
@@ -190,13 +148,7 @@ module.exports = ({ strapi }) => ({
     });
   },
 
-  /**
-   * Increment the retry counter on a log entry.
-   *
-   * @param {string} logDocumentId
-   * @param {number} retryCount
-   * @returns {Promise<object>}
-   */
+  /** Increment retry counter */
   async updateRetryCount(logDocumentId, retryCount) {
     return strapi.documents(LOG_UID).update({
       documentId: logDocumentId,
@@ -205,14 +157,7 @@ module.exports = ({ strapi }) => ({
   },
 
   /**
-   * Retrieve paginated log entries with optional filters.
-   *
-   * @param {object} params
-   * @param {object} params.filters     - Strapi filters object
-   * @param {object} params.sort        - e.g. { triggeredAt: 'desc' }
-   * @param {number} params.page
-   * @param {number} params.pageSize
-   * @returns {Promise<{ results: object[], pagination: object }>}
+   * Retrieve paginated log entries.
    */
   async findLogs({ filters = {}, sort = { triggeredAt: 'desc' }, page = 1, pageSize = 25 } = {}) {
     return strapi.documents(LOG_UID).findMany({
@@ -223,12 +168,7 @@ module.exports = ({ strapi }) => ({
     });
   },
 
-  /**
-   * Retrieve a single log entry by its documentId.
-   *
-   * @param {string} logDocumentId
-   * @returns {Promise<object|null>}
-   */
+  /** Retrieve a single log entry by its own documentId (the log's Strapi ID). */
   async findLog(logDocumentId) {
     return strapi.documents(LOG_UID).findOne({
       documentId: logDocumentId,
@@ -236,28 +176,21 @@ module.exports = ({ strapi }) => ({
     });
   },
 
-  /**
-   * Count log entries matching given filters — used for pagination metadata.
-   *
-   * @param {object} filters
-   * @returns {Promise<number>}
-   */
+  /** Count log entries. */
   async countLogs(filters = {}) {
     return strapi.documents(LOG_UID).count({ filters });
   },
 
   /**
-   * Check whether there is already an in-progress sync for a given document
-   * to the same target — used to detect concurrent sync attempts.
+   * Check if a sync is already in progress for a given content document → target env.
    *
-   * @param {string} documentId
+   * @param {string} syncDocumentId  - The synced document's documentId
    * @param {string} targetEnv
-   * @returns {Promise<boolean>}
    */
-  async isAlreadyInProgress(documentId, targetEnv) {
+  async isAlreadyInProgress(syncDocumentId, targetEnv) {
     const count = await strapi.documents(LOG_UID).count({
       filters: {
-        documentId,
+        syncDocumentId,
         targetEnv,
         status: { $in: ['pending', 'in_progress'] },
       },
@@ -265,23 +198,18 @@ module.exports = ({ strapi }) => ({
     return count > 0;
   },
 
-  /**
-   * Export logs to a flat array suitable for CSV serialisation.
-   *
-   * @param {object} filters
-   * @returns {Promise<object[]>}
-   */
+  /** Export logs as flat array for CSV. */
   async exportLogs(filters = {}) {
     const logs = await strapi.documents(LOG_UID).findMany({
       filters,
-      sort:     { triggeredAt: 'desc' },
-      populate: ['triggeredBy'],
+      sort:       { triggeredAt: 'desc' },
+      populate:   ['triggeredBy'],
       pagination: { page: 1, pageSize: 10_000 },
     });
 
     return logs.map((log) => ({
-      id:               log.id,
-      documentId:       log.documentId,
+      logDocumentId:    log.documentId,
+      syncDocumentId:   log.syncDocumentId,
       contentType:      log.contentType,
       sourceEnv:        log.sourceEnv,
       targetEnv:        log.targetEnv,
@@ -304,19 +232,10 @@ module.exports = ({ strapi }) => ({
   },
 });
 
-// ─── Private Helpers ──────────────────────────────────────────────────────────
-
-/**
- * Truncate large payload objects to avoid bloating the DB.
- * Keeps the payload for debugging, but limits it to ~512 KB.
- *
- * @param {object} payload
- * @returns {object}
- */
 function _truncatePayload(payload) {
   try {
     const json = JSON.stringify(payload);
-    if (json.length <= 524_288) return payload;  // 512 KB
+    if (json.length <= 524_288) return payload;
     return { _truncated: true, _originalSize: json.length, preview: json.slice(0, 1000) };
   } catch {
     return { _truncationError: true };
