@@ -1,19 +1,29 @@
 /**
- * Admin panel index — exports constants used by strapi-admin.js
+ * Admin panel index — exports constants and components used by strapi-admin.js
  *
  * @module env-sync/admin/src/index
  */
+
+import React, { useEffect, useRef } from 'react';
 
 export const PLUGIN_ID   = 'env-sync';
 export const PLUGIN_ICON = 'refresh';
 
 /**
- * Initializer — headless React component that signals plugin readiness.
+ * Initializer — Strapi v5 requires this component to call setPlugin(pluginId)
+ * once the plugin is ready. It renders nothing.
+ *
+ * @param {{ setPlugin: function }} props
  */
-export const Initializer = ({ setPlugin }) => {
-  setPlugin(PLUGIN_ID);
-  return null;
-};
+export function Initializer({ setPlugin }) {
+  const ref = useRef(setPlugin);
 
-export { SyncButton }  from './components/SyncButton';
-export { LogsPage }    from './pages/LogsPage';
+  useEffect(() => {
+    ref.current(PLUGIN_ID);
+  }, []);
+
+  return null;
+}
+
+export { SyncButton } from './components/SyncButton';
+export { LogsPage }   from './pages/LogsPage';
