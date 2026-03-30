@@ -1,17 +1,21 @@
 /**
- * Admin panel index — exports constants and components used by strapi-admin.js
- *
+ * Admin panel index
  * @module env-sync/admin/src/index
  */
 
 import React, { useEffect, useRef } from 'react';
+import { ArrowsCounterClockwise } from '@strapi/icons';
 
-export const PLUGIN_ID   = 'env-sync';
-export const PLUGIN_ICON = 'ArrowsCounterClockwise';
+export const PLUGIN_ID = 'env-sync';
+
+/**
+ * The icon component — passed directly to addMenuLink.
+ * Strapi v5 addMenuLink accepts a React component for the icon field.
+ */
+export const PLUGIN_ICON = ArrowsCounterClockwise;
 
 /**
  * Initializer — signals plugin readiness to Strapi.
- * Must call setPlugin(id) exactly once, inside useEffect.
  */
 export function Initializer({ setPlugin }) {
   const ref = useRef(setPlugin);

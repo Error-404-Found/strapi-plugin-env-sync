@@ -2,10 +2,6 @@
 
 /**
  * Sync Controller — Outbound
- *
- * Handles admin-triggered sync requests from the source environment.
- * All routes here require admin authentication + RBAC policy check.
- *
  * @module env-sync/server/controllers/sync
  */
 
@@ -14,12 +10,10 @@ const PLUGIN_ID = 'env-sync';
 module.exports = {
 
   /**
-   * POST /api/env-sync/trigger
-   * Body: { contentType, documentId, targetEnv, locale?, isDryRun?, conflictStrategyOverride? }
+   * POST /trigger
    */
   async trigger(ctx) {
     const adminUser = ctx.state.admin;
-
     const {
       contentType,
       documentId,
@@ -27,39 +21,41 @@ module.exports = {
       locale                   = null,
       isDryRun                 = false,
       conflictStrategyOverride,
-    } = ctx.request.body;
+    } = ctx.request.body || {};
 
     const validationError = _validateTriggerInput({ contentType, documentId, targetEnv });
     if (validationError) return ctx.badRequest(validationError);
 
-    const pluginConfig = strapi.config.get('plugin::' + PLUGIN_ID);
-    const currentEnv   = pluginConfig?.currentEnv;
+    const pluginConfig = strapi.config.get('plugin::' + PLUGIN_ID) || {};
 
-    if (!pluginConfig?.targets?.[targetEnv]) {
+    if (!pluginConfig.targets || !pluginConfig.targets[targetEnv]) {
       return ctx.badRequest(
-        'This environment ("' + currentEnv + '") is not configured to sync to "' + targetEnv + '". Check your plugin config.'
+        'Environment "' + targetEnv + '" is not configured as a sync target. ' +
+        'Add it to targets in config/plugins.js'
       );
     }
 
-    if (isDryRun && !pluginConfig?.enableDryRun) {
-      return ctx.badRequest('Dry-run mode is not enabled in plugin configuration.');
+    if (isDryRun && !pluginConfig.enableDryRun) {
+      return ctx.badRequest('Dry-run mode is disabled in plugin configuration.');
     }
 
     const validStrategies = ['source-wins', 'target-wins', 'manual'];
     if (conflictStrategyOverride && !validStrategies.includes(conflictStrategyOverride)) {
-      return ctx.badRequest('Invalid conflictStrategyOverride "' + conflictStrategyOverride + '".');
+      return ctx.badRequest('Invalid conflictStrategyOverride: ' + conflictStrategyOverride);
     }
 
     strapi.log.info(
-      '[env-sync] Sync triggered by admin ' + adminUser?.id + ' (' + adminUser?.email + '): ' +
-      contentType + '#' + documentId + ' → ' + targetEnv + (isDryRun ? ' [DRY RUN]' : '')
+      '[env-sync] Sync triggered by admin ' + adminUser?.id +
+      ': ' + contentType + '#' + documentId + ' → ' + targetEnv +
+      (isDryRun ? ' [DRY RUN]' : '')
     );
 
     const syncEngine = strapi.plugin(PLUGIN_ID).service('syncEngine');
     const result = await syncEngine.triggerSync({
       contentType, documentId, locale, targetEnv,
-      triggeredByAdminId: adminUser?.id,
-      isDryRun, conflictStrategyOverride,
+      triggeredByAdminId:   adminUser?.id,
+      isDryRun,
+      conflictStrategyOverride,
     });
 
     if (!result.success && result.reason === 'error') {
@@ -72,18 +68,37 @@ module.exports = {
   },
 
   /**
-   * GET /api/env-sync/config
-   * Returns sanitised plugin config (no secrets) for the admin UI.
+   * GET /config
+   *
+   * Returns sanitised plugin configuration — no secrets exposed.
+   * currentEnv and targets[] are the critical fields the admin UI needs.
    */
   async getConfig(ctx) {
-    const pluginConfig = strapi.config.get('plugin::' + PLUGIN_ID) || {};
+    const pluginConfig = strapi.config.get('plugin::' + PLUGIN_ID);
+
+    // Config not set at all — give a helpful error
+    if (!pluginConfig) {
+      ctx.status = 200;
+      ctx.body = {
+        currentEnv:       null,
+        targets:          [],
+        conflictStrategy: 'source-wins',
+        enableDryRun:     true,
+        enableRollback:   true,
+        perContentType:   {},
+        _warning:         'Plugin config not found. Add env-sync config to config/plugins.js',
+      };
+      return;
+    }
+
+    ctx.status = 200;
     ctx.body = {
-      currentEnv:       pluginConfig.currentEnv,
+      currentEnv:       pluginConfig.currentEnv       || null,
       targets:          Object.keys(pluginConfig.targets || {}),
-      conflictStrategy: pluginConfig.conflictStrategy,
-      enableDryRun:     pluginConfig.enableDryRun,
-      enableRollback:   pluginConfig.enableRollback,
-      perContentType:   pluginConfig.perContentType || {},
+      conflictStrategy: pluginConfig.conflictStrategy || 'source-wins',
+      enableDryRun:     pluginConfig.enableDryRun     !== false,
+      enableRollback:   pluginConfig.enableRollback   !== false,
+      perContentType:   pluginConfig.perContentType   || {},
     };
   },
 };

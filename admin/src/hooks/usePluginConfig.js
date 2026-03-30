@@ -1,32 +1,52 @@
 /**
  * usePluginConfig — fetches and caches plugin config from the server.
  *
+ * Uses React state + useEffect so it works correctly inside any
+ * React component including Strapi modal content renderers.
+ * No module-level cache that could get stuck in a bad state.
+ *
  * @module env-sync/admin/src/hooks/usePluginConfig
  */
 
 import { useState, useEffect } from 'react';
 import { api } from '../utils/api';
 
-let _cache = null;
-let _promise = null;
-
 /**
  * Returns { config, loading, error }
- * Config shape: { currentEnv, targets: string[], conflictStrategy, enableDryRun, enableRollback, perContentType }
+ *
+ * config shape:
+ * {
+ *   currentEnv:       'SIT' | 'QA' | 'UAT' | 'PROD',
+ *   targets:          string[],   // e.g. ['QA']
+ *   conflictStrategy: string,
+ *   enableDryRun:     boolean,
+ *   enableRollback:   boolean,
+ *   perContentType:   object,
+ * }
  */
 export function usePluginConfig() {
-  const [config,  setConfig]  = useState(_cache);
-  const [loading, setLoading] = useState(!_cache);
+  const [config,  setConfig]  = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(null);
 
   useEffect(() => {
-    if (_cache) { setConfig(_cache); setLoading(false); return; }
-    if (!_promise) {
-      _promise = api.getConfig().then((data) => { _cache = data; return data; });
-    }
-    _promise
-      .then((data) => { setConfig(data); setLoading(false); })
-      .catch((err) => { setError(err.message); setLoading(false); });
+    let cancelled = false;
+
+    api.getConfig()
+      .then((data) => {
+        if (!cancelled) {
+          setConfig(data);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err.message);
+          setLoading(false);
+        }
+      });
+
+    return () => { cancelled = true; };
   }, []);
 
   return { config, loading, error };

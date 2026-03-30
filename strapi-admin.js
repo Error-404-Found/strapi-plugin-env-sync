@@ -1,20 +1,23 @@
 /**
  * strapi-plugin-env-sync — Admin Entry Point
  *
- * Strapi v5 correct APIs:
+ * Verified against Strapi v5 source (@strapi/admin router.d.ts):
  *
- * 1. Menu icon:    Uses 'ArrowsCounterClockwise' from @strapi/icons (confirmed export)
- * 2. Sync button:  contentManager.apis.addDocumentAction() with position:'header'
- *                  This is the ONLY correct way to add a button to the edit view
- *                  header in Strapi v5. injectContentManagerComponent does NOT exist.
- * 3. Menu link:    Relative path (no leading slash), sync Component (not async)
- * 4. Router:       Relative path, sync Component
+ * addMenuLink requires:
+ *   - icon:      React.ElementType  (component reference, NOT a string)
+ *   - to:        string             (relative, no leading slash)
+ *   - Component: () => Promise<{ default: React.ComponentType }>  (MUST be async)
+ *
+ * addRoute is NOT needed — addMenuLink creates the route internally
+ * using path `${link.to}/*` with lazy loading.
+ *
+ * Sync button uses content-manager's addDocumentAction API
+ * which is the only correct way to add buttons to the edit view in v5.
  *
  * @module strapi-plugin-env-sync/strapi-admin
  */
 
 import { PLUGIN_ID, PLUGIN_ICON, Initializer, SyncButtonAction } from './admin/src/index';
-import { LogsPage } from './admin/src/pages/LogsPage';
 
 export default {
 
@@ -26,9 +29,11 @@ export default {
       initializer: Initializer,
     });
 
-    // ── Menu link → Logs page ────────────────────────────────────────────
-    // Component must be sync function returning { default: Component }
-    // Path must be relative (no leading slash)
+    // ── Add sidebar menu link + auto-register route ──────────────────────
+    // Component MUST be async: () => Promise<{ default: ComponentType }>
+    // Strapi uses this for lazy-loading and also registers the route automatically
+    // icon MUST be a React.ElementType (component), not a string
+    // to MUST be relative (no leading slash)
     app.addMenuLink({
       to:        'plugins/' + PLUGIN_ID,
       icon:      PLUGIN_ICON,
@@ -36,53 +41,32 @@ export default {
         id:             PLUGIN_ID + '.menu.label',
         defaultMessage: 'Env Sync',
       },
-      Component: () => ({ default: LogsPage }),
+      Component: async () => {
+        const { LogsPage } = await import('./admin/src/pages/LogsPage');
+        return { default: LogsPage };
+      },
       permissions: [
         { action: 'plugin::' + PLUGIN_ID + '.view-logs', subject: null },
       ],
     });
-
-    // ── Register route ───────────────────────────────────────────────────
-    app.router.addRoute({
-      path:      'plugins/' + PLUGIN_ID,
-      exact:     true,
-      Component: LogsPage,
-    });
   },
 
   bootstrap(app) {
-    // ── Register Sync Button as a DocumentAction in the edit view header ─
-    //
-    // This is the CORRECT Strapi v5 API. The content-manager plugin exposes:
-    //   addDocumentAction  → renders in the edit view action panel or header
-    //   addDocumentHeaderAction → renders in the header (top right area)
-    //
-    // We use addDocumentAction with position:'header' which is the
-    // standard documented approach for v5.
-    //
+    // ── Register Sync Button in the Content Manager edit view ────────────
+    // The ONLY correct v5 API — addDocumentAction with position:'header'
     const contentManager = app.getPlugin('content-manager');
 
     if (!contentManager) {
-      console.warn('[env-sync] content-manager plugin not found — sync button will not appear.');
+      console.warn('[env-sync] content-manager plugin not found — sync button unavailable.');
       return;
     }
 
-    const apis = contentManager.apis;
-
-    if (apis && typeof apis.addDocumentAction === 'function') {
-      // Primary: addDocumentAction with position: 'header'
-      apis.addDocumentAction([SyncButtonAction]);
-
-    } else if (apis && typeof apis.addDocumentHeaderAction === 'function') {
-      // Fallback for some v5 sub-versions that split header vs panel
-      apis.addDocumentHeaderAction([SyncButtonAction]);
-
+    if (contentManager.apis?.addDocumentAction) {
+      contentManager.apis.addDocumentAction([SyncButtonAction]);
+    } else if (contentManager.apis?.addDocumentHeaderAction) {
+      contentManager.apis.addDocumentHeaderAction([SyncButtonAction]);
     } else {
-      console.warn(
-        '[env-sync] Could not register sync button — ' +
-        'contentManager.apis.addDocumentAction not available. ' +
-        'Strapi version: check that you are on v5.0.0+'
-      );
+      console.warn('[env-sync] addDocumentAction not available on content-manager plugin.');
     }
   },
 };

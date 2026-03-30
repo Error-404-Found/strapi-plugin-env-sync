@@ -1,32 +1,39 @@
 /**
- * API utility — typed wrappers around all plugin endpoints.
+ * API utility for strapi-plugin-env-sync.
  *
- * URL structure in Strapi v5 admin panel:
- *   Plugin admin routes are served at: /api/{pluginId}/{route-path}
- *   For env-sync:  /api/env-sync/config, /api/env-sync/logs, etc.
+ * URL structure in Strapi v5:
  *
- * The admin panel JWT is read from localStorage (key: 'jwtToken') and
- * sent as Authorization: Bearer header on every request.
+ *   ADMIN routes  (type: 'admin')   → served at /admin/{pluginId}/{path}
+ *   CONTENT-API routes              → served at /api/{pluginId}/{path}
+ *
+ * So our endpoints are:
+ *   GET  /admin/env-sync/config        ← plugin config
+ *   POST /admin/env-sync/trigger       ← trigger sync
+ *   GET  /admin/env-sync/logs          ← audit logs
+ *   POST /admin/env-sync/rollback      ← rollback
+ *   GET  /admin/env-sync/status        ← health status
+ *
+ * Auth: Strapi admin JWT stored in localStorage under key 'jwtToken'
  *
  * @module env-sync/admin/src/utils/api
  */
 
-// Base URL — Strapi v5 plugin admin routes sit at /api/{pluginId}/
-const BASE = '/api/env-sync';
+const ADMIN_BASE = '/admin/env-sync';
 
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
 
 async function get(path, params = {}) {
-  const qs  = new URLSearchParams(
-    Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''))
-  ).toString();
-  const url = BASE + path + (qs ? '?' + qs : '');
+  const cleaned = Object.fromEntries(
+    Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
+  );
+  const qs  = new URLSearchParams(cleaned).toString();
+  const url = ADMIN_BASE + path + (qs ? '?' + qs : '');
   const res = await fetch(url, { headers: _authHeaders() });
   return _handleResponse(res);
 }
 
 async function post(path, body = {}) {
-  const res = await fetch(BASE + path, {
+  const res = await fetch(ADMIN_BASE + path, {
     method:  'POST',
     headers: _authHeaders(),
     body:    JSON.stringify(body),
@@ -38,30 +45,24 @@ async function post(path, body = {}) {
 
 export const api = {
 
-  /** Get sanitised plugin config (current env, targets, feature flags). */
+  /** Get sanitised plugin config (currentEnv, targets[], feature flags). */
   getConfig: () => get('/config'),
 
   /** Get cached target environment health statuses. */
   getStatus: () => get('/status'),
 
-  /** Force refresh health checks against all configured targets. */
+  /** Force a health re-check of all configured targets. */
   refreshStatus: () => post('/status/refresh'),
 
   /**
-   * Trigger a sync (or dry-run).
-   * @param {object} p
-   * @param {string}  p.contentType
-   * @param {string}  p.documentId
-   * @param {string}  p.targetEnv
-   * @param {string|null} p.locale
-   * @param {boolean} p.isDryRun
-   * @param {string}  [p.conflictStrategyOverride]
+   * Trigger a sync or dry-run.
+   * @param {{ contentType, documentId, targetEnv, locale, isDryRun, conflictStrategyOverride }} p
    */
   triggerSync: (p) => post('/trigger', p),
 
   /**
-   * Fetch audit logs with optional filters.
-   * @param {object} params - { page, pageSize, status, sourceEnv, targetEnv, contentType, dateFrom, dateTo }
+   * Fetch paginated audit logs.
+   * @param {{ page, pageSize, status, sourceEnv, targetEnv, contentType }} params
    */
   getLogs: (params = {}) => get('/logs', { page: 1, pageSize: 25, ...params }),
 
@@ -69,20 +70,21 @@ export const api = {
   getLog: (id) => get('/logs/' + id),
 
   /**
-   * Trigger a rollback from a snapshot.
+   * Rollback a document from a snapshot.
    * @param {string} snapshotDocumentId
    */
   rollback: (snapshotDocumentId) => post('/rollback', { snapshotDocumentId }),
 
   /**
-   * Export logs as CSV — returns a blob URL the caller can download.
-   * @param {object} params - same filter params as getLogs
+   * Export logs as CSV — returns a blob URL.
+   * @param {object} params - same filters as getLogs
    */
   exportCsv: async (params = {}) => {
-    const qs  = new URLSearchParams(
-      Object.fromEntries(Object.entries(params).filter(([, v]) => v !== '' && v !== null && v !== undefined))
-    ).toString();
-    const res = await fetch(BASE + '/logs/export' + (qs ? '?' + qs : ''), {
+    const cleaned = Object.fromEntries(
+      Object.entries(params).filter(([k, v]) => v !== '' && v !== null && v !== undefined && !['page','pageSize'].includes(k))
+    );
+    const qs  = new URLSearchParams(cleaned).toString();
+    const res = await fetch(ADMIN_BASE + '/logs/export' + (qs ? '?' + qs : ''), {
       headers: _authHeaders(),
     });
     if (!res.ok) throw new Error('CSV export failed (' + res.status + ')');
@@ -93,24 +95,20 @@ export const api = {
 
 // ── Private helpers ───────────────────────────────────────────────────────────
 
-/**
- * Build auth headers including the Strapi admin JWT.
- * Strapi v5 stores the admin token in localStorage under the key 'jwtToken'.
- */
 function _authHeaders() {
-  const token = _getAdminToken();
   return {
     'Content-Type': 'application/json',
-    ...(token ? { Authorization: 'Bearer ' + token } : {}),
+    Authorization:  'Bearer ' + _getAdminToken(),
   };
 }
 
 function _getAdminToken() {
   try {
-    // Strapi v5 admin JWT key
-    return localStorage.getItem('jwtToken') ||
-           localStorage.getItem('strapi-admin-token') ||
-           '';
+    return (
+      localStorage.getItem('jwtToken') ||
+      localStorage.getItem('strapi-admin-token') ||
+      ''
+    );
   } catch {
     return '';
   }
@@ -124,14 +122,9 @@ async function _handleResponse(res) {
   } catch {
     data = {};
   }
-
   if (!res.ok) {
-    const message =
-      data?.error?.message ||
-      data?.message ||
-      'Request failed with status ' + res.status;
-    throw new Error(message);
+    const msg = data?.error?.message || data?.message || 'Request failed (' + res.status + ')';
+    throw new Error(msg);
   }
-
   return data;
 }
