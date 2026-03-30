@@ -1,32 +1,37 @@
 /**
  * API utility — typed wrappers around all plugin endpoints.
- * Uses Strapi's built-in admin axios instance so auth headers are managed automatically.
+ *
+ * URL structure in Strapi v5 admin panel:
+ *   Plugin admin routes are served at: /api/{pluginId}/{route-path}
+ *   For env-sync:  /api/env-sync/config, /api/env-sync/logs, etc.
+ *
+ * The admin panel JWT is read from localStorage (key: 'jwtToken') and
+ * sent as Authorization: Bearer header on every request.
  *
  * @module env-sync/admin/src/utils/api
  */
 
-const BASE = '/env-sync';
+// Base URL — Strapi v5 plugin admin routes sit at /api/{pluginId}/
+const BASE = '/api/env-sync';
 
-/**
- * Helper: GET via Strapi admin fetch.
- */
+// ── HTTP helpers ──────────────────────────────────────────────────────────────
+
 async function get(path, params = {}) {
-  const qs = new URLSearchParams(params).toString();
-  const url = '/api' + BASE + path + (qs ? '?' + qs : '');
-  const res = await fetch(url, { headers: _headers() });
-  return _handle(res);
+  const qs  = new URLSearchParams(
+    Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''))
+  ).toString();
+  const url = BASE + path + (qs ? '?' + qs : '');
+  const res = await fetch(url, { headers: _authHeaders() });
+  return _handleResponse(res);
 }
 
-/**
- * Helper: POST via Strapi admin fetch.
- */
 async function post(path, body = {}) {
-  const res = await fetch('/api' + BASE + path, {
+  const res = await fetch(BASE + path, {
     method:  'POST',
-    headers: _headers(),
+    headers: _authHeaders(),
     body:    JSON.stringify(body),
   });
-  return _handle(res);
+  return _handleResponse(res);
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -39,11 +44,11 @@ export const api = {
   /** Get cached target environment health statuses. */
   getStatus: () => get('/status'),
 
-  /** Force refresh health checks. */
+  /** Force refresh health checks against all configured targets. */
   refreshStatus: () => post('/status/refresh'),
 
   /**
-   * Trigger a sync.
+   * Trigger a sync (or dry-run).
    * @param {object} p
    * @param {string}  p.contentType
    * @param {string}  p.documentId
@@ -56,12 +61,12 @@ export const api = {
 
   /**
    * Fetch audit logs with optional filters.
-   * @param {object} filters
+   * @param {object} params - { page, pageSize, status, sourceEnv, targetEnv, contentType, dateFrom, dateTo }
    */
-  getLogs: (filters = {}) => get('/logs', { ...filters, page: filters.page || 1, pageSize: filters.pageSize || 25 }),
+  getLogs: (params = {}) => get('/logs', { page: 1, pageSize: 25, ...params }),
 
-  /** Get a single log entry. */
-  getLog: (documentId) => get('/logs/' + documentId),
+  /** Get a single log entry by its Strapi documentId. */
+  getLog: (id) => get('/logs/' + id),
 
   /**
    * Trigger a rollback from a snapshot.
@@ -69,42 +74,64 @@ export const api = {
    */
   rollback: (snapshotDocumentId) => post('/rollback', { snapshotDocumentId }),
 
-  /** Export logs as CSV — returns a blob URL. */
-  exportCsv: async (filters = {}) => {
-    const qs  = new URLSearchParams(filters).toString();
-    const res = await fetch('/api' + BASE + '/logs/export' + (qs ? '?' + qs : ''), { headers: _headers() });
-    if (!res.ok) throw new Error('CSV export failed.');
+  /**
+   * Export logs as CSV — returns a blob URL the caller can download.
+   * @param {object} params - same filter params as getLogs
+   */
+  exportCsv: async (params = {}) => {
+    const qs  = new URLSearchParams(
+      Object.fromEntries(Object.entries(params).filter(([, v]) => v !== '' && v !== null && v !== undefined))
+    ).toString();
+    const res = await fetch(BASE + '/logs/export' + (qs ? '?' + qs : ''), {
+      headers: _authHeaders(),
+    });
+    if (!res.ok) throw new Error('CSV export failed (' + res.status + ')');
     const blob = await res.blob();
     return URL.createObjectURL(blob);
   },
 };
 
-// ── Private ───────────────────────────────────────────────────────────────────
+// ── Private helpers ───────────────────────────────────────────────────────────
 
-function _headers() {
+/**
+ * Build auth headers including the Strapi admin JWT.
+ * Strapi v5 stores the admin token in localStorage under the key 'jwtToken'.
+ */
+function _authHeaders() {
   const token = _getAdminToken();
   return {
-    'Content-Type':  'application/json',
+    'Content-Type': 'application/json',
     ...(token ? { Authorization: 'Bearer ' + token } : {}),
   };
 }
 
 function _getAdminToken() {
   try {
-    // Strapi stores the admin JWT in localStorage under this key
-    return localStorage.getItem('jwtToken') || '';
+    // Strapi v5 admin JWT key
+    return localStorage.getItem('jwtToken') ||
+           localStorage.getItem('strapi-admin-token') ||
+           '';
   } catch {
     return '';
   }
 }
 
-async function _handle(res) {
-  const text = await res.text();
+async function _handleResponse(res) {
   let data;
-  try { data = JSON.parse(text); } catch { data = { raw: text }; }
+  try {
+    const text = await res.text();
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = {};
+  }
+
   if (!res.ok) {
-    const message = data?.error?.message || data?.message || 'Request failed (' + res.status + ')';
+    const message =
+      data?.error?.message ||
+      data?.message ||
+      'Request failed with status ' + res.status;
     throw new Error(message);
   }
+
   return data;
 }

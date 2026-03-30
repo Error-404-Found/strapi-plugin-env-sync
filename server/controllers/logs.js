@@ -67,9 +67,9 @@ module.exports = {
    * GET /api/env-sync/logs/:documentId
    */
   async findOne(ctx) {
-    const { documentId } = ctx.params;
+    const { id } = ctx.params;
     const loggerSvc = strapi.plugin(PLUGIN_ID).service('logger');
-    const log = await loggerSvc.findLog(documentId);
+    const log = await loggerSvc.findLog(id);
 
     if (!log) return ctx.notFound('Log entry not found.');
     ctx.body = { data: log };

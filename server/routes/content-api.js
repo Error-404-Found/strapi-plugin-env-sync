@@ -1,8 +1,11 @@
 'use strict';
 
 /**
- * Content API routes — public-ish but protected by verify-sync-token middleware.
- * These are called machine-to-machine between Strapi environments.
+ * Content API routes (machine-to-machine, Bearer token protected).
+ *
+ * Same rule: DO NOT add /env-sync prefix.
+ * Strapi v5 auto-prefixes content-api routes with /{pluginName} too,
+ * making /receive accessible at /api/env-sync/receive.
  *
  * @module env-sync/server/routes/content-api
  */
@@ -14,19 +17,19 @@ module.exports = {
     // ── Inbound Sync Receiver ─────────────────────────────────────────────
     {
       method:  'POST',
-      path:    '/env-sync/receive',
+      path:    '/receive',
       handler: 'receive.receive',
       config: {
-        auth:        false, // Auth handled by verify-sync-token middleware
+        auth:        false,
         middlewares: ['plugin::env-sync.verify-sync-token'],
         description: 'Receive and apply an incoming sync payload from a source environment',
       },
     },
 
-    // ── Peek (pre-sync diff data) ─────────────────────────────────────────
+    // ── Peek (pre-sync diff) ──────────────────────────────────────────────
     {
       method:  'POST',
-      path:    '/env-sync/peek',
+      path:    '/peek',
       handler: 'receive.peek',
       config: {
         auth:        false,
@@ -38,7 +41,7 @@ module.exports = {
     // ── Health check (called by source env) ───────────────────────────────
     {
       method:  'GET',
-      path:    '/env-sync/health',
+      path:    '/health',
       handler: 'health.check',
       config: {
         auth:        false,

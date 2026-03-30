@@ -1,8 +1,15 @@
 'use strict';
 
 /**
- * Admin routes — require Strapi admin JWT authentication.
- * RBAC policies applied per-route to enforce Super Admin / Reviewer access.
+ * Admin routes for strapi-plugin-env-sync.
+ *
+ * IMPORTANT — Strapi v5 route prefix behaviour:
+ * Strapi automatically prepends `/{pluginName}` to all plugin routes.
+ * For this plugin (id: 'env-sync'), paths here like '/config' become
+ * accessible at /api/env-sync/config in the admin panel.
+ *
+ * DO NOT add /env-sync prefix to these paths — it would result in
+ * /api/env-sync/env-sync/config (double prefix = 404).
  *
  * @module env-sync/server/routes/admin
  */
@@ -14,21 +21,21 @@ module.exports = {
     // ── Sync Trigger ──────────────────────────────────────────────────────
     {
       method:  'POST',
-      path:    '/env-sync/trigger',
+      path:    '/trigger',
       handler: 'sync.trigger',
       config: {
-        policies: ['plugin::env-sync.canTriggerSync'],
+        policies:    ['plugin::env-sync.canTriggerSync'],
         description: 'Trigger an on-demand content sync to a target environment',
       },
     },
 
-    // ── Plugin Config (read-only, any authenticated admin) ────────────────
+    // ── Plugin Config (any authenticated admin) ───────────────────────────
     {
       method:  'GET',
-      path:    '/env-sync/config',
+      path:    '/config',
       handler: 'sync.getConfig',
       config: {
-        policies: [],
+        policies:    [],
         description: 'Get sanitised plugin configuration for the admin UI',
       },
     },
@@ -36,28 +43,28 @@ module.exports = {
     // ── Audit Logs ────────────────────────────────────────────────────────
     {
       method:  'GET',
-      path:    '/env-sync/logs',
+      path:    '/logs',
       handler: 'logs.find',
       config: {
-        policies: ['plugin::env-sync.canViewLogs'],
+        policies:    ['plugin::env-sync.canViewLogs'],
         description: 'Retrieve paginated sync audit logs',
       },
     },
     {
       method:  'GET',
-      path:    '/env-sync/logs/export',
+      path:    '/logs/export',
       handler: 'logs.exportCsv',
       config: {
-        policies: ['plugin::env-sync.canViewLogs'],
+        policies:    ['plugin::env-sync.canViewLogs'],
         description: 'Export sync audit logs as CSV',
       },
     },
     {
       method:  'GET',
-      path:    '/env-sync/logs/:documentId',
+      path:    '/logs/:id',
       handler: 'logs.findOne',
       config: {
-        policies: ['plugin::env-sync.canViewLogs'],
+        policies:    ['plugin::env-sync.canViewLogs'],
         description: 'Retrieve a single sync audit log entry',
       },
     },
@@ -65,10 +72,10 @@ module.exports = {
     // ── Rollback ──────────────────────────────────────────────────────────
     {
       method:  'POST',
-      path:    '/env-sync/rollback',
+      path:    '/rollback',
       handler: 'logs.rollback',
       config: {
-        policies: ['plugin::env-sync.canRollback'],
+        policies:    ['plugin::env-sync.canRollback'],
         description: 'Restore a document from a pre-sync snapshot',
       },
     },
@@ -76,19 +83,19 @@ module.exports = {
     // ── Health / Status ───────────────────────────────────────────────────
     {
       method:  'GET',
-      path:    '/env-sync/status',
+      path:    '/status',
       handler: 'health.status',
       config: {
-        policies: [],
+        policies:    [],
         description: 'Get cached reachability status of all target environments',
       },
     },
     {
       method:  'POST',
-      path:    '/env-sync/status/refresh',
+      path:    '/status/refresh',
       handler: 'health.refresh',
       config: {
-        policies: [],
+        policies:    [],
         description: 'Force a health re-check of all configured target environments',
       },
     },
