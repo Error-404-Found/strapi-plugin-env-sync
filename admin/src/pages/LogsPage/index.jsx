@@ -1,12 +1,9 @@
 /**
- * LogsPage — full-featured audit log viewer in the Strapi admin panel.
- *
- * Features:
- *  - Filterable table (env, content type, status, date range)
- *  - Expandable diff summary rows
- *  - Rollback button per successful sync
- *  - CSV export
- *  - Pagination
+ * LogsPage — audit log viewer.
+ * Uses only confirmed @strapi/design-system v2 exports:
+ *   Table, Thead, Tbody, Tr, Th, Td, Typography, Box, Flex, Button,
+ *   Badge, Loader, SingleSelect, SingleSelectOption, TextInput,
+ *   Pagination, PreviousLink, NextLink, PageLink, IconButton, Tooltip
  *
  * @module env-sync/admin/src/pages/LogsPage
  */
@@ -16,24 +13,20 @@ import {
   Box, Typography, Flex, Button, Badge,
   Table, Thead, Tbody, Tr, Th, Td,
   Pagination, PreviousLink, NextLink, PageLink,
-  Select, Option, DatePicker, Loader, Alert,
-  TextInput, Divider, BaseHeaderLayout, ContentLayout,
-  IconButton, Tooltip,
+  SingleSelect, SingleSelectOption,
+  Loader, TextInput, IconButton, Tooltip,
 } from '@strapi/design-system';
-import {
-  Refresh, Download, ChevronDown, ChevronUp,
-} from '@strapi/icons';
 import { RollbackButton } from '../../components/RollbackButton';
-import { DiffViewer } from '../../components/DiffViewer';
-import { api } from '../../utils/api';
+import { DiffViewer }     from '../../components/DiffViewer';
+import { api }            from '../../utils/api';
 
-const STATUS_BADGE = {
-  pending:     { bg: 'neutral100',  text: 'neutral600'  },
-  in_progress: { bg: 'warning100',  text: 'warning700'  },
-  success:     { bg: 'success100',  text: 'success700'  },
-  failed:      { bg: 'danger100',   text: 'danger700'   },
-  rolled_back: { bg: 'secondary100',text: 'secondary700'},
-  dry_run:     { bg: 'primary100',  text: 'primary700'  },
+const STATUS_COLORS = {
+  pending:     'neutral',
+  in_progress: 'warning',
+  success:     'success',
+  failed:      'danger',
+  rolled_back: 'secondary',
+  dry_run:     'primary',
 };
 
 const STATUS_OPTIONS = ['', 'pending', 'in_progress', 'success', 'failed', 'rolled_back', 'dry_run'];
@@ -46,20 +39,18 @@ export function LogsPage() {
   const [error,       setError]       = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
   const [exporting,   setExporting]   = useState(false);
-
-  // Filters
-  const [filters, setFilters] = useState({
+  const [filters,     setFilters]     = useState({
     page: 1, pageSize: 25,
     status: '', sourceEnv: '', targetEnv: '', contentType: '',
-    dateFrom: '', dateTo: '',
   });
 
-  const loadLogs = useCallback(async (f = filters) => {
+  const loadLogs = useCallback(async (f) => {
     setLoading(true);
     setError(null);
     try {
-      const clean = Object.fromEntries(Object.entries(f).filter(([, v]) => v !== '' && v !== null));
-      const res = await api.getLogs(clean);
+      const active = f || filters;
+      const clean  = Object.fromEntries(Object.entries(active).filter(([, v]) => v !== ''));
+      const res    = await api.getLogs(clean);
       setLogs(res.data || []);
       setPagination(res.pagination || { page: 1, pageSize: 25, total: 0, pageCount: 1 });
     } catch (err) {
@@ -71,15 +62,12 @@ export function LogsPage() {
 
   useEffect(() => { loadLogs(); }, []); // eslint-disable-line
 
-  const setFilter = (key, val) => {
-    const next = { ...filters, [key]: val, page: 1 };
-    setFilters(next);
-  };
+  const setFilter = (key, val) => setFilters((prev) => ({ ...prev, [key]: val, page: 1 }));
 
   const handleSearch = () => loadLogs(filters);
 
   const handleReset = () => {
-    const reset = { page: 1, pageSize: 25, status: '', sourceEnv: '', targetEnv: '', contentType: '', dateFrom: '', dateTo: '' };
+    const reset = { page: 1, pageSize: 25, status: '', sourceEnv: '', targetEnv: '', contentType: '' };
     setFilters(reset);
     loadLogs(reset);
   };
@@ -87,11 +75,11 @@ export function LogsPage() {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const clean = Object.fromEntries(Object.entries(filters).filter(([k, v]) => v !== '' && !['page','pageSize'].includes(k)));
-      const blobUrl = await api.exportCsv(clean);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = 'env-sync-logs-' + Date.now() + '.csv';
+      const clean    = Object.fromEntries(Object.entries(filters).filter(([k, v]) => v !== '' && !['page','pageSize'].includes(k)));
+      const blobUrl  = await api.exportCsv(clean);
+      const a        = document.createElement('a');
+      a.href         = blobUrl;
+      a.download     = 'env-sync-logs-' + Date.now() + '.csv';
       a.click();
       URL.revokeObjectURL(blobUrl);
     } catch (err) {
@@ -109,42 +97,84 @@ export function LogsPage() {
 
   return (
     <Box>
-      <BaseHeaderLayout
-        title="Environment Sync Logs"
-        subtitle={'Audit trail of all content sync operations. ' + pagination.total + ' total.'}
-        as="h2"
-        primaryAction={
-          <Button
-            variant="secondary"
-            startIcon={exporting ? <Loader small /> : <Download />}
-            onClick={handleExport}
-            disabled={exporting || logs.length === 0}
-          >
-            Export CSV
-          </Button>
-        }
-      />
+      {/* ── Header ──────────────────────────────────────────────────── */}
+      <Box padding={6} paddingBottom={0}>
+        <Flex justifyContent="space-between" alignItems="flex-start" marginBottom={4}>
+          <Box>
+            <Typography variant="alpha" as="h1">Environment Sync Logs</Typography>
+            <Typography variant="epsilon" textColor="neutral500">
+              Audit trail of all content sync operations — {pagination.total} total
+            </Typography>
+          </Box>
+          <Flex gap={2}>
+            <Button
+              variant="secondary"
+              onClick={() => loadLogs(filters)}
+              disabled={loading}
+            >
+              ↻ Refresh
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={handleExport}
+              disabled={exporting || logs.length === 0}
+            >
+              {exporting ? '…' : '↓ Export CSV'}
+            </Button>
+          </Flex>
+        </Flex>
+      </Box>
 
-      <ContentLayout>
-
+      <Box padding={6}>
         {/* ── Filters ──────────────────────────────────────────────── */}
-        <Box background="neutral0" padding={4} shadow="filterShadow" borderRadius="4px" marginBottom={6}>
-          <Typography variant="sigma" textColor="neutral600" marginBottom={3} display="block">Filters</Typography>
+        <Box
+          background="neutral0"
+          padding={4}
+          borderRadius="4px"
+          marginBottom={6}
+          borderColor="neutral200"
+          borderWidth="1px"
+          borderStyle="solid"
+        >
+          <Typography variant="sigma" textColor="neutral600" marginBottom={3} display="block">
+            Filters
+          </Typography>
           <Flex gap={3} wrap="wrap" alignItems="flex-end">
             <Box minWidth="160px">
-              <Select label="Status" value={filters.status} onChange={(v) => setFilter('status', v)} size="S">
-                {STATUS_OPTIONS.map((s) => <Option key={s} value={s}>{s || 'All statuses'}</Option>)}
-              </Select>
+              <SingleSelect
+                label="Status"
+                value={filters.status}
+                onChange={(v) => setFilter('status', v)}
+                size="S"
+              >
+                {STATUS_OPTIONS.map((s) => (
+                  <SingleSelectOption key={s} value={s}>{s || 'All statuses'}</SingleSelectOption>
+                ))}
+              </SingleSelect>
             </Box>
             <Box minWidth="120px">
-              <Select label="Source env" value={filters.sourceEnv} onChange={(v) => setFilter('sourceEnv', v)} size="S">
-                {ENV_OPTIONS.map((e) => <Option key={e} value={e}>{e || 'All'}</Option>)}
-              </Select>
+              <SingleSelect
+                label="Source env"
+                value={filters.sourceEnv}
+                onChange={(v) => setFilter('sourceEnv', v)}
+                size="S"
+              >
+                {ENV_OPTIONS.map((e) => (
+                  <SingleSelectOption key={e} value={e}>{e || 'All'}</SingleSelectOption>
+                ))}
+              </SingleSelect>
             </Box>
             <Box minWidth="120px">
-              <Select label="Target env" value={filters.targetEnv} onChange={(v) => setFilter('targetEnv', v)} size="S">
-                {ENV_OPTIONS.map((e) => <Option key={e} value={e}>{e || 'All'}</Option>)}
-              </Select>
+              <SingleSelect
+                label="Target env"
+                value={filters.targetEnv}
+                onChange={(v) => setFilter('targetEnv', v)}
+                size="S"
+              >
+                {ENV_OPTIONS.map((e) => (
+                  <SingleSelectOption key={e} value={e}>{e || 'All'}</SingleSelectOption>
+                ))}
+              </SingleSelect>
             </Box>
             <Box minWidth="200px">
               <TextInput
@@ -155,22 +185,29 @@ export function LogsPage() {
                 size="S"
               />
             </Box>
-            <Flex gap={2}>
-              <Button onClick={handleSearch} size="S">Search</Button>
-              <Button variant="tertiary" onClick={handleReset} size="S">Reset</Button>
-              <IconButton
-                label="Refresh"
-                icon={<Refresh />}
-                onClick={() => loadLogs(filters)}
-              />
+            <Flex gap={2} paddingTop={5}>
+              <Button size="S" onClick={handleSearch}>Search</Button>
+              <Button size="S" variant="tertiary" onClick={handleReset}>Reset</Button>
             </Flex>
           </Flex>
         </Box>
 
-        {error && <Alert variant="danger" marginBottom={4}>{error}</Alert>}
+        {/* ── Error ────────────────────────────────────────────────── */}
+        {error && (
+          <Box padding={4} background="danger100" borderRadius="4px" marginBottom={4}>
+            <Typography textColor="danger600">{error}</Typography>
+          </Box>
+        )}
 
         {/* ── Table ────────────────────────────────────────────────── */}
-        <Box background="neutral0" shadow="filterShadow" borderRadius="4px">
+        <Box
+          background="neutral0"
+          borderRadius="4px"
+          borderColor="neutral200"
+          borderWidth="1px"
+          borderStyle="solid"
+          overflow="hidden"
+        >
           {loading ? (
             <Flex justifyContent="center" padding={10}><Loader /></Flex>
           ) : logs.length === 0 ? (
@@ -181,19 +218,13 @@ export function LogsPage() {
             <Table colCount={8} rowCount={logs.length + 1}>
               <Thead>
                 <Tr>
-                  <Th><Typography variant="sigma">Status</Typography></Th>
-                  <Th><Typography variant="sigma">Content type</Typography></Th>
-                  <Th><Typography variant="sigma">Document ID</Typography></Th>
-                  <Th><Typography variant="sigma">Route</Typography></Th>
-                  <Th><Typography variant="sigma">Triggered by</Typography></Th>
-                  <Th><Typography variant="sigma">Triggered at</Typography></Th>
-                  <Th><Typography variant="sigma">Duration</Typography></Th>
-                  <Th><Typography variant="sigma">Actions</Typography></Th>
+                  {['Status', 'Content type', 'Document ID', 'Route', 'Triggered by', 'When', 'Duration', 'Actions'].map((h) => (
+                    <Th key={h}><Typography variant="sigma">{h}</Typography></Th>
+                  ))}
                 </Tr>
               </Thead>
               <Tbody>
                 {logs.map((log) => {
-                  const badgeCfg = STATUS_BADGE[log.status] || STATUS_BADGE.pending;
                   const isExpanded = expandedRow === log.documentId;
                   const user = log.triggeredBy
                     ? (log.triggeredBy.firstname + ' ' + log.triggeredBy.lastname).trim() || log.triggeredBy.email
@@ -206,7 +237,7 @@ export function LogsPage() {
                         onClick={() => setExpandedRow(isExpanded ? null : log.documentId)}
                       >
                         <Td>
-                          <Badge backgroundColor={badgeCfg.bg} textColor={badgeCfg.text}>
+                          <Badge active={log.status === 'success'}>
                             {log.isDryRun ? 'dry run' : log.status}
                           </Badge>
                         </Td>
@@ -246,28 +277,34 @@ export function LogsPage() {
                                 onSuccess={() => loadLogs(filters)}
                               />
                             )}
-                            <IconButton
-                              label={isExpanded ? 'Collapse' : 'Expand diff'}
-                              icon={isExpanded ? <ChevronUp /> : <ChevronDown />}
+                            <Button
+                              variant="ghost"
+                              size="S"
                               onClick={() => setExpandedRow(isExpanded ? null : log.documentId)}
-                            />
+                            >
+                              {isExpanded ? '▲' : '▼'}
+                            </Button>
                           </Flex>
                         </Td>
                       </Tr>
 
-                      {/* ── Expanded diff row ─────────────────────── */}
+                      {/* Expanded diff row */}
                       {isExpanded && (
                         <Tr>
                           <Td colSpan={8}>
                             <Box padding={4} background="neutral50">
                               {log.errorMessage && (
-                                <Alert variant="danger" marginBottom={3}>
-                                  {log.errorMessage}
-                                </Alert>
+                                <Box padding={3} background="danger100" borderRadius="4px" marginBottom={3}>
+                                  <Typography variant="pi" textColor="danger600">
+                                    {log.errorMessage}
+                                  </Typography>
+                                </Box>
                               )}
                               <DiffViewer diff={log.diffSummary} />
                               {!log.diffSummary && !log.errorMessage && (
-                                <Typography variant="pi" textColor="neutral500">No diff data available.</Typography>
+                                <Typography variant="pi" textColor="neutral500">
+                                  No diff data available.
+                                </Typography>
                               )}
                             </Box>
                           </Td>
@@ -285,16 +322,22 @@ export function LogsPage() {
         {pagination.pageCount > 1 && (
           <Flex justifyContent="center" marginTop={6}>
             <Pagination activePage={pagination.page} pageCount={pagination.pageCount}>
-              <PreviousLink onClick={() => handlePage(pagination.page - 1)}>Previous</PreviousLink>
-              {Array.from({ length: pagination.pageCount }, (_, i) => i + 1).map((p) => (
-                <PageLink key={p} number={p} onClick={() => handlePage(p)}>{p}</PageLink>
+              <PreviousLink onClick={() => handlePage(Math.max(1, pagination.page - 1))}>
+                Previous
+              </PreviousLink>
+              {Array.from({ length: Math.min(pagination.pageCount, 10) }, (_, i) => i + 1).map((p) => (
+                <PageLink key={p} number={p} onClick={() => handlePage(p)}>
+                  {p}
+                </PageLink>
               ))}
-              <NextLink onClick={() => handlePage(pagination.page + 1)}>Next</NextLink>
+              <NextLink onClick={() => handlePage(Math.min(pagination.pageCount, pagination.page + 1))}>
+                Next
+              </NextLink>
             </Pagination>
           </Flex>
         )}
 
-      </ContentLayout>
+      </Box>
     </Box>
   );
 }

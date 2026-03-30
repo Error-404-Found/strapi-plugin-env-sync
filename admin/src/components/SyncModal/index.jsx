@@ -1,9 +1,6 @@
 /**
- * SyncModal — confirmation dialog shown before triggering a sync.
- *
- * Step 1: Dry-run to compute diff
- * Step 2: Show diff + strategy selector
- * Step 3: Confirm → trigger real sync
+ * SyncModal — confirmation dialog before triggering a sync.
+ * Uses Modal, Dialog — confirmed exports from @strapi/design-system v2.
  *
  * @module env-sync/admin/src/components/SyncModal
  */
@@ -11,12 +8,18 @@
 import React, { useState, useCallback } from 'react';
 import {
   Modal, Button, Typography, Box, Flex,
-  Loader, Select, Option, Alert, Divider,
+  Loader, SingleSelect, SingleSelectOption,
 } from '@strapi/design-system';
 import { DiffViewer } from '../DiffViewer';
 import { api } from '../../utils/api';
 
-const STEPS = { CONFIRM: 'CONFIRM', DIFFING: 'DIFFING', DIFF_READY: 'DIFF_READY', SYNCING: 'SYNCING', DONE: 'DONE' };
+const STEPS = {
+  CONFIRM:    'CONFIRM',
+  DIFFING:    'DIFFING',
+  DIFF_READY: 'DIFF_READY',
+  SYNCING:    'SYNCING',
+  DONE:       'DONE',
+};
 
 const STRATEGY_OPTIONS = [
   { value: 'source-wins', label: 'Source wins (overwrite target)' },
@@ -26,13 +29,13 @@ const STRATEGY_OPTIONS = [
 
 /**
  * @param {object} props
- * @param {boolean} props.isOpen
+ * @param {boolean}  props.isOpen
  * @param {function} props.onClose
- * @param {string} props.contentType
- * @param {string} props.documentId
- * @param {string} props.targetEnv
- * @param {string} props.defaultStrategy
- * @param {boolean} props.enableDryRun
+ * @param {string}   props.contentType
+ * @param {string}   props.documentId
+ * @param {string}   props.targetEnv
+ * @param {string}   props.defaultStrategy
+ * @param {boolean}  props.enableDryRun
  * @param {function} props.onSuccess
  */
 export function SyncModal({
@@ -41,8 +44,8 @@ export function SyncModal({
   contentType,
   documentId,
   targetEnv,
-  defaultStrategy  = 'source-wins',
-  enableDryRun     = true,
+  defaultStrategy = 'source-wins',
+  enableDryRun    = true,
   onSuccess,
 }) {
   const [step,     setStep]     = useState(STEPS.CONFIRM);
@@ -61,16 +64,11 @@ export function SyncModal({
 
   const handleClose = () => { reset(); onClose(); };
 
-  /** Step 1 → run dry-run to get diff */
   const handlePreview = useCallback(async () => {
     setStep(STEPS.DIFFING);
     setError(null);
     try {
-      const res = await api.triggerSync({
-        contentType, documentId, targetEnv,
-        locale: null, isDryRun: true,
-        conflictStrategyOverride: strategy,
-      });
+      const res = await api.triggerSync({ contentType, documentId, targetEnv, locale: null, isDryRun: true, conflictStrategyOverride: strategy });
       setDiff(res.diff);
       setStep(STEPS.DIFF_READY);
     } catch (err) {
@@ -79,16 +77,11 @@ export function SyncModal({
     }
   }, [contentType, documentId, targetEnv, strategy]);
 
-  /** Step 2 → trigger real sync */
   const handleSync = useCallback(async () => {
     setStep(STEPS.SYNCING);
     setError(null);
     try {
-      const res = await api.triggerSync({
-        contentType, documentId, targetEnv,
-        locale: null, isDryRun: false,
-        conflictStrategyOverride: strategy,
-      });
+      const res = await api.triggerSync({ contentType, documentId, targetEnv, locale: null, isDryRun: false, conflictStrategyOverride: strategy });
       setResult(res);
       setStep(STEPS.DONE);
       if (res.success) onSuccess?.(res);
@@ -104,6 +97,7 @@ export function SyncModal({
     <Modal.Root onClose={handleClose} labelledBy="sync-modal-title">
       <Modal.Overlay />
       <Modal.Content>
+
         <Modal.Header>
           <Typography id="sync-modal-title" variant="beta" fontWeight="bold">
             Sync to {targetEnv}
@@ -113,7 +107,7 @@ export function SyncModal({
         <Modal.Body>
           <Box padding={2}>
 
-            {/* ── CONFIRM step ─────────────────────────────────────── */}
+            {/* CONFIRM */}
             {step === STEPS.CONFIRM && (
               <Box>
                 <Typography variant="omega">
@@ -123,17 +117,21 @@ export function SyncModal({
                   <Typography variant="pi" textColor="neutral600" marginBottom={2} display="block">
                     Conflict resolution strategy
                   </Typography>
-                  <Select value={strategy} onChange={setStrategy} size="S">
+                  <SingleSelect value={strategy} onChange={setStrategy} size="S">
                     {STRATEGY_OPTIONS.map((o) => (
-                      <Option key={o.value} value={o.value}>{o.label}</Option>
+                      <SingleSelectOption key={o.value} value={o.value}>{o.label}</SingleSelectOption>
                     ))}
-                  </Select>
+                  </SingleSelect>
                 </Box>
-                {error && <Alert marginTop={4} variant="danger">{error}</Alert>}
+                {error && (
+                  <Box marginTop={4} padding={3} background="danger100" borderRadius="4px">
+                    <Typography variant="pi" textColor="danger600">{error}</Typography>
+                  </Box>
+                )}
               </Box>
             )}
 
-            {/* ── DIFFING step ─────────────────────────────────────── */}
+            {/* DIFFING */}
             {step === STEPS.DIFFING && (
               <Flex justifyContent="center" padding={8} direction="column" alignItems="center" gap={4}>
                 <Loader />
@@ -141,18 +139,22 @@ export function SyncModal({
               </Flex>
             )}
 
-            {/* ── DIFF_READY step ──────────────────────────────────── */}
+            {/* DIFF_READY */}
             {step === STEPS.DIFF_READY && (
               <Box>
                 <Typography variant="omega" marginBottom={4} display="block">
                   Preview of changes that will be applied to <strong>{targetEnv}</strong>:
                 </Typography>
                 <DiffViewer diff={diff} />
-                {error && <Alert marginTop={4} variant="danger">{error}</Alert>}
+                {error && (
+                  <Box marginTop={4} padding={3} background="danger100" borderRadius="4px">
+                    <Typography variant="pi" textColor="danger600">{error}</Typography>
+                  </Box>
+                )}
               </Box>
             )}
 
-            {/* ── SYNCING step ─────────────────────────────────────── */}
+            {/* SYNCING */}
             {step === STEPS.SYNCING && (
               <Flex justifyContent="center" padding={8} direction="column" alignItems="center" gap={4}>
                 <Loader />
@@ -160,19 +162,21 @@ export function SyncModal({
               </Flex>
             )}
 
-            {/* ── DONE step ────────────────────────────────────────── */}
+            {/* DONE */}
             {step === STEPS.DONE && result && (
               <Box>
-                {result.success ? (
-                  <Alert variant="success">
-                    ✓ Sync complete! {result.diff?.fieldsChanged?.length || 0} field(s) updated.
-                    {result.snapshotId && <> Snapshot saved for rollback.</>}
-                  </Alert>
-                ) : (
-                  <Alert variant="danger">
-                    Sync did not complete: {result.message}
-                  </Alert>
-                )}
+                <Box
+                  padding={4}
+                  background={result.success ? 'success100' : 'danger100'}
+                  borderRadius="4px"
+                >
+                  <Typography variant="omega" textColor={result.success ? 'success600' : 'danger600'}>
+                    {result.success
+                      ? '✓ Sync complete! ' + (result.diff?.fieldsChanged?.length || 0) + ' field(s) updated.' + (result.snapshotId ? ' Snapshot saved for rollback.' : '')
+                      : 'Sync did not complete: ' + result.message
+                    }
+                  </Typography>
+                </Box>
               </Box>
             )}
 
@@ -199,12 +203,17 @@ export function SyncModal({
           {step === STEPS.DIFF_READY && (
             <>
               <Button variant="secondary" onClick={reset}>Back</Button>
-              <Button variant="danger-light" onClick={handleSync} disabled={diff && !diff.hasChanges}>
+              <Button
+                variant="danger-light"
+                onClick={handleSync}
+                disabled={diff && !diff.hasChanges}
+              >
                 {diff && !diff.hasChanges ? 'No changes' : 'Confirm & Sync'}
               </Button>
             </>
           )}
         </Modal.Footer>
+
       </Modal.Content>
     </Modal.Root>
   );

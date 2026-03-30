@@ -1,24 +1,20 @@
 /**
- * RollbackButton — shown in the Logs page against each successful sync entry.
- * Confirms then triggers rollback via the API.
+ * RollbackButton — confirm-then-rollback dialog.
+ * Uses Dialog (confirmed export from @strapi/design-system v2).
  *
  * @module env-sync/admin/src/components/RollbackButton
  */
 
 import React, { useState } from 'react';
-import {
-  Button, Dialog, DialogBody, DialogFooter,
-  Typography, Flex, Loader,
-} from '@strapi/design-system';
-import { Refresh } from '@strapi/icons';
+import { Button, Dialog, Flex, Typography, Loader } from '@strapi/design-system';
 import { api } from '../../utils/api';
 
 /**
- * @param {object} props
- * @param {string} props.snapshotId    - The snapshot documentId to restore
- * @param {string} props.contentType
- * @param {string} props.documentId
- * @param {function} props.onSuccess   - Called after successful rollback
+ * @param {object}   props
+ * @param {string}   props.snapshotId
+ * @param {string}   props.contentType
+ * @param {string}   props.documentId
+ * @param {function} props.onSuccess
  */
 export function RollbackButton({ snapshotId, contentType, documentId, onSuccess }) {
   const [open,    setOpen]    = useState(false);
@@ -43,40 +39,45 @@ export function RollbackButton({ snapshotId, contentType, documentId, onSuccess 
 
   return (
     <>
-      <Button
-        variant="tertiary"
-        size="S"
-        startIcon={<Refresh />}
-        onClick={() => setOpen(true)}
-      >
-        Rollback
+      <Button variant="tertiary" size="S" onClick={() => setOpen(true)}>
+        ↩ Rollback
       </Button>
 
-      <Dialog onClose={() => !loading && setOpen(false)} title="Confirm Rollback" isOpen={open}>
-        <DialogBody>
-          <Flex direction="column" alignItems="center" gap={4}>
-            {loading ? (
-              <>
-                <Loader small />
-                <Typography variant="omega">Restoring…</Typography>
-              </>
-            ) : (
-              <Typography variant="omega" textAlign="center">
-                This will restore <strong>{contentType}</strong> (ID: <code>{documentId}</code>) to the state it was in before this sync.
-                <br /><br />
-                <strong>This cannot be undone.</strong>
-              </Typography>
-            )}
-            {error && (
-              <Typography variant="pi" textColor="danger600">{error}</Typography>
-            )}
-          </Flex>
-        </DialogBody>
-        <DialogFooter
-          startAction={<Button variant="tertiary" onClick={() => setOpen(false)} disabled={loading}>Cancel</Button>}
-          endAction={<Button variant="danger-light" onClick={handleConfirm} disabled={loading}>Yes, rollback</Button>}
-        />
-      </Dialog>
+      <Dialog.Root open={open} onOpenChange={(v) => !loading && setOpen(v)}>
+        <Dialog.Content>
+          <Dialog.Header>Confirm Rollback</Dialog.Header>
+          <Dialog.Body>
+            <Flex direction="column" alignItems="center" gap={4} padding={2}>
+              {loading ? (
+                <>
+                  <Loader small />
+                  <Typography variant="omega">Restoring…</Typography>
+                </>
+              ) : (
+                <Typography variant="omega" textAlign="center">
+                  This will restore <strong>{contentType?.split('.').pop()}</strong>{' '}
+                  (ID: <code>{documentId?.slice(0, 8)}…</code>) to the state before this sync.
+                  <br /><br />
+                  <strong>This cannot be undone.</strong>
+                </Typography>
+              )}
+              {error && (
+                <Box padding={3} background="danger100" borderRadius="4px" width="100%">
+                  <Typography variant="pi" textColor="danger600">{error}</Typography>
+                </Box>
+              )}
+            </Flex>
+          </Dialog.Body>
+          <Dialog.Footer>
+            <Button variant="tertiary" onClick={() => setOpen(false)} disabled={loading}>
+              Cancel
+            </Button>
+            <Button variant="danger-light" onClick={handleConfirm} disabled={loading}>
+              Yes, rollback
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog.Root>
     </>
   );
 }
